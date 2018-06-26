@@ -1,19 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"text/template"
 	"time"
 
 	strava "github.com/strava/go.strava"
 )
 
 var (
-	start    = flag.String("start", "", "start date")
-	end      = flag.String("end", "", "end date")
-	extended = flag.Bool("extended", false, "extended training information")
-	token    = flag.String("token", "", "API Access token")
-	layout   = "02/01/2006"
+	start       = flag.String("start", "", "start date")
+	end         = flag.String("end", "", "end date")
+	extended    = flag.Bool("extended", false, "extended training information")
+	stravaToken = flag.String("strava", "", "Strava API Access token")
+	mapBoxToken = flag.String("mapbox", "", "Mapbox API Access token")
+	layout      = "02/01/2006"
 )
 
 func init() {
@@ -22,10 +28,17 @@ func init() {
 
 func main() {
 	after, _ := time.Parse(layout, *start)
+	after = after.AddDate(0, 0, -1)
 	before, _ := time.Parse(layout, *end)
-	client := strava.NewClient(*token)
+	before = before.AddDate(0, 0, 1)
+	client := strava.NewClient(*stravaToken)
 	currentAthleteService := strava.NewCurrentAthleteService(client)
-	activities, _ := currentAthleteService.ListActivities().Before(int(before.Unix())).After(int(after.Unix())).Do()
+	activities, err := currentAthleteService.ListActivities().Before(int(before.Unix())).After(int(after.Unix())).Do()
+	if err != nil {
+		panic(err)
+	}
+
+	ids := []int64{}
 
 	for _, activity := range activities {
 		y, m, d := activity.StartDate.Date()
@@ -41,5 +54,43 @@ func main() {
 			fmt.Printf("Elevation gain: %v m\n", activity.TotalElevationGain)
 			fmt.Printf("\n")
 		}
+		ids = append(ids, activity.Id)
 	}
+	polylines := []string{}
+
+	activitiesService := strava.NewActivitiesService(client)
+	for _, id := range ids {
+		activity, _ := activitiesService.Get(id).Do()
+		polylines = append(polylines, floatTuples(activity.Map.Polyline.Decode()).String())
+		fmt.Println("id: ", id, "size of polylines:", len(polylines))
+	}
+
+	templ, _ := template.ParseFiles("index.html")
+	buf := new(bytes.Buffer)
+	data := struct {
+		EncodedRoutes []string
+		MapboxToken   string
+	}{
+		polylines,
+		*mapBoxToken,
+	}
+
+	_ = templ.Execute(buf, data)
+
+	file, _ := os.Create("page.html")
+	defer file.Close()
+	file.Write(buf.Bytes())
+
+}
+
+type floatTuples [][2]float64
+
+func (ft floatTuples) String() string {
+	ftAsStringList := []string{}
+	for _, elem := range ft {
+		elemStr := "[" + strconv.FormatFloat(elem[0], 'f', 6, 64) + "," + strconv.FormatFloat(elem[1], 'f', 6, 64) + "]"
+		ftAsStringList = append(ftAsStringList, elemStr)
+	}
+
+	return "[" + strings.Join(ftAsStringList, ",") + "]"
 }
