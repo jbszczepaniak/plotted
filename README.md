@@ -20,5 +20,12 @@ go build
 ```
 ./plotted --help
 ```
-4. Run with some parameters;
-./plotted -start=01/06/2018 -end=30/06/2018 -extended  -strava=YOUR_STRAVA_ACCESS_TOKEN -mapbox=YOUR_MAPBOX_TOKEN
+4. Run with some parameters
+```
+./plotted \
+  -start=01/06/2018 \
+  -end=30/06/2018 \
+  -extended \
+  -strava=YOUR_STRAVA_ACCESS_TOKEN \
+  -mapbox=YOUR_MAPBOX_TOKEN
+```
