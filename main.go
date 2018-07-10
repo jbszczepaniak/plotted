@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -60,7 +62,37 @@ func main() {
 
 	activitiesService := strava.NewActivitiesService(client)
 	for _, id := range ids {
-		activity, _ := activitiesService.Get(id).Do()
+		cachedFileName := fmt.Sprintf("cache/%d.json", id)
+
+		_, err := os.Stat(cachedFileName)
+
+		cacheExists := false
+		if err == nil {
+			cacheExists = true
+		}
+
+		var activity *strava.ActivityDetailed
+
+		if cacheExists {
+			cacheContent, _ := ioutil.ReadFile(cachedFileName)
+			err := json.Unmarshal(cacheContent, &activity)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			activity, _ = activitiesService.Get(id).Do()
+			serialized, err := json.Marshal(activity)
+			if err != nil {
+				panic(err)
+			}
+			file, err := os.Create(cachedFileName)
+			if err != nil {
+				panic(err)
+			}
+			file.Write(serialized)
+			file.Close()
+		}
+
 		polylines = append(polylines, floatTuples(activity.Map.Polyline.Decode()).String())
 		fmt.Println("id: ", id, "size of polylines:", len(polylines))
 	}
