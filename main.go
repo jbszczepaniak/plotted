@@ -35,9 +35,15 @@ func main() {
 	before = before.AddDate(0, 0, 1)
 	client := strava.NewClient(*stravaToken)
 	currentAthleteService := strava.NewCurrentAthleteService(client)
-	activities, err := currentAthleteService.ListActivities().Before(int(before.Unix())).After(int(after.Unix())).Do()
-	if err != nil {
-		panic(err)
+
+	var activities []*strava.ActivitySummary
+
+	for i := 1; ; i++ { // Strava API does not accept page number 0.
+		activitiesPage, _ := currentAthleteService.ListActivities().Before(int(before.Unix())).After(int(after.Unix())).Page(i).Do()
+		if len(activitiesPage) == 0 {
+			break
+		}
+		activities = append(activities, activitiesPage...)
 	}
 
 	ids := []int64{}
