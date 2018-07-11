@@ -47,8 +47,11 @@ func main() {
 	}
 
 	ids := []int64{}
-
+	var summaryDistance float64
+	var summaryTime int
 	for _, activity := range activities {
+		summaryDistance += activity.Distance
+		summaryTime += activity.MovingTime
 		y, m, d := activity.StartDate.Date()
 		fmt.Printf("%02d/%02d/%d, %s, Distance: %v km", d, m, y, activity.Type, activity.Distance/1000)
 		if activity.Commute {
@@ -64,6 +67,11 @@ func main() {
 		}
 		ids = append(ids, activity.Id)
 	}
+
+	fmt.Printf("Summary distance: %v km\n", summaryDistance/1000)
+	fmt.Printf("Summary time: %v hours\n", float64(summaryTime)/3600.0)
+	fmt.Printf("Average speed: %v km/h\n", (summaryDistance/1000)/(float64(summaryTime)/3600))
+
 	polylines := []string{}
 
 	activitiesService := strava.NewActivitiesService(client)
@@ -98,9 +106,7 @@ func main() {
 			file.Write(serialized)
 			file.Close()
 		}
-
 		polylines = append(polylines, floatTuples(activity.Map.Polyline.Decode()).String())
-		fmt.Println("id: ", id, "size of polylines:", len(polylines))
 	}
 
 	templ, _ := template.ParseFiles("index.html")
