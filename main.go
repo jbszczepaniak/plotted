@@ -49,9 +49,13 @@ func main() {
 	ids := []int64{}
 	var summaryDistance float64
 	var summaryTime int
+	var summaryEleveation float64
+
 	for _, activity := range activities {
 		summaryDistance += activity.Distance
 		summaryTime += activity.MovingTime
+		summaryEleveation += activity.TotalElevationGain
+
 		y, m, d := activity.StartDate.Date()
 		fmt.Printf("%02d/%02d/%d, %s, Distance: %v km", d, m, y, activity.Type, activity.Distance/1000)
 		if activity.Commute {
@@ -69,6 +73,7 @@ func main() {
 	}
 
 	fmt.Printf("Summary distance: %v km\n", summaryDistance/1000)
+	fmt.Printf("Summary elevation gain: %v m\n", summaryEleveation)
 	fmt.Printf("Summary time: %v hours\n", float64(summaryTime)/3600.0)
 	fmt.Printf("Average speed: %v km/h\n", (summaryDistance/1000)/(float64(summaryTime)/3600))
 
