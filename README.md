@@ -29,3 +29,10 @@ go build
   -strava=YOUR_STRAVA_ACCESS_TOKEN \
   -mapbox=YOUR_MAPBOX_TOKEN
 ```
+
+## TODO
+
+1. Give a warning when within a given time range there was at least one training which started 50 km further from the first training in the range
+2. Ask for training summary pages asynchronously. Strava API indicates last page returning empty result, thus algortihm should send package of requests (i.e. 10), and wait some time (i.e. 1 second). If there is empty page in the responses - stop sending requests. Probably given values may be tuned to accomplish faster solution.
+3. Plot heart rate/velocity ratios for trainings.
+4. Unit test package.
