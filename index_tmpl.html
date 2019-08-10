@@ -25,7 +25,7 @@
         }).addTo(mymap);
         var encodedRoutes = [
           {{range .EncodedRoutes}}
-              {{.}},  
+              {{.}},
           {{end}}
         ];
         for (let route of encodedRoutes) {

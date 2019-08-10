@@ -2,144 +2,178 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	"context"
 	"flag"
 	"fmt"
+	"html/template"
 	"io/ioutil"
+	"log"
 	"os"
-	"strconv"
-	"strings"
-	"text/template"
 	"time"
 
-	strava "github.com/strava/go.strava"
+	swagger "github.com/jedruniu/plotted/swagger-generated"
+
+	"github.com/antihax/optional"
+	gopoly "github.com/twpayne/go-polyline"
+
+	"golang.org/x/oauth2"
+
+	"net/http"
 )
 
 var (
-	start       = flag.String("start", "", "start date")
-	end         = flag.String("end", "", "end date")
-	extended    = flag.Bool("extended", false, "extended training information")
-	stravaToken = flag.String("strava", "", "Strava API Access token")
-	mapBoxToken = flag.String("mapbox", "", "Mapbox API Access token")
-	layout      = "02/01/2006"
+	stravaClientID = flag.String("strava_clientID", "", "Strava client ID")
+	stravaSecret   = flag.String("strava_secret", "", "Strava Secret")
+	mapBoxToken    = flag.String("mapbox", "", "Mapbox API Access token")
+
+	layout = "02/01/2006"
 )
 
 func init() {
 	flag.Parse()
 }
 
+var code string
+var token string
+
 func main() {
-	after, _ := time.Parse(layout, *start)
-	after = after.AddDate(0, 0, -1)
-	before, _ := time.Parse(layout, *end)
-	before = before.AddDate(0, 0, 1)
-	client := strava.NewClient(*stravaToken)
-	currentAthleteService := strava.NewCurrentAthleteService(client)
+	log.SetFlags(log.LstdFlags | log.Llongfile)
 
-	var activities []*strava.ActivitySummary
+	ctx := context.Background()
 
-	for i := 1; ; i++ { // Strava API does not accept page number 0.
-		activitiesPage, _ := currentAthleteService.ListActivities().Before(int(before.Unix())).After(int(after.Unix())).Page(i).Do()
-		if len(activitiesPage) == 0 {
-			break
-		}
-		activities = append(activities, activitiesPage...)
+	conf := &oauth2.Config{
+		ClientID:     *stravaClientID,
+		ClientSecret: *stravaSecret,
+		Scopes:       []string{"activity:write,activity:read_all,profile:read_all"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  "https://www.strava.com/oauth/authorize",
+			TokenURL: "https://www.strava.com/oauth/token",
+		},
+		RedirectURL: "http://localhost:8888/auth_callback",
 	}
 
-	ids := []int64{}
-	var summaryDistance float64
-	var summaryTime int
-	var summaryEleveation float64
+	http.HandleFunc("/auth_callback", func(w http.ResponseWriter, r *http.Request) {
+		code = r.URL.Query().Get("code")
 
-	for _, activity := range activities {
-		summaryDistance += activity.Distance
-		summaryTime += activity.MovingTime
-		summaryEleveation += activity.TotalElevationGain
+		tok, err := conf.Exchange(ctx, code)
+		if err != nil {
+			fmt.Println("tutaj?", err)
+		}
+		token = tok.AccessToken
 
-		y, m, d := activity.StartDate.Date()
-		fmt.Printf("%02d/%02d/%d, %s, Distance: %v km", d, m, y, activity.Type, activity.Distance/1000)
-		if activity.Commute {
-			fmt.Printf(" (commute)")
+		http.Redirect(w, r, "http://localhost:8888/map?after=30/01/2018&before=30/09/2019", 302)
+	})
+
+	http.HandleFunc("/map", func(w http.ResponseWriter, r *http.Request) {
+		cfg := swagger.NewConfiguration()
+		client := swagger.NewAPIClient(cfg)
+
+		ctx = context.WithValue(ctx, swagger.ContextAccessToken, token)
+
+		opts := swagger.GetLoggedInAthleteActivitiesOpts{}
+
+		unparsedAfter := r.URL.Query().Get("after")
+		unparsedBefore := r.URL.Query().Get("before")
+
+		after, _ := time.Parse(layout, unparsedAfter)
+		after = after.AddDate(0, 0, -1)
+		before, _ := time.Parse(layout, unparsedBefore)
+		before = before.AddDate(0, 0, 1)
+
+		var activities []swagger.SummaryActivity
+
+		for i := 1; ; i++ {
+			opts.After = optional.NewInt32(int32(after.Unix()))
+			opts.Before = optional.NewInt32(int32(before.Unix()))
+			opts.Page = optional.NewInt32(int32(i))
+
+			summary, _, _ := client.ActivitiesApi.GetLoggedInAthleteActivities(ctx, &opts)
+			if len(summary) == 0 {
+				break
+			}
+			activities = append(activities, summary...)
 		}
-		fmt.Printf("\n")
-		if *extended {
-			fmt.Printf("Average heartrate: %v bps\n", activity.AverageHeartrate)
-			fmt.Printf("Maximum speed: %v m/s\n", activity.MaximunSpeed)
-			fmt.Printf("Average speed: %v m/s\n", activity.AverageSpeed)
-			fmt.Printf("Elevation gain: %v m\n", activity.TotalElevationGain)
-			fmt.Printf("\n")
+
+		var floatPolylines [][][]float64
+
+		for _, activity := range activities {
+			cachedFileName := fmt.Sprintf("cache/%d.cache", activity.Id)
+
+			_, err := os.Stat(cachedFileName)
+
+			cacheExists := false
+			if err == nil {
+				cacheExists = true
+			}
+
+			var polyline []byte
+
+			if cacheExists {
+				cacheContent, err := ioutil.ReadFile(cachedFileName)
+				if err != nil {
+					log.Printf("error when reading %s, err: %v", cachedFileName, err)
+				}
+				polyline = cacheContent
+			} else {
+				detailed, _, err := client.ActivitiesApi.GetActivityById(ctx, activity.Id, nil)
+				if err != nil {
+					log.Printf("err for activity %d, err: %v", activity.Id, err)
+					continue
+				}
+				if detailed.Map_.Polyline == "" {
+					continue // activity without a map
+				}
+				polyline = []byte(detailed.Map_.Polyline)
+
+				file, err := os.Create(cachedFileName)
+				if err != nil {
+					log.Printf("error when creting %s, err: %v", cachedFileName, err)
+				}
+				file.Write(polyline)
+				file.Close()
+			}
+
+			var polyDecoded [][]float64
+
+			polyDecoded, _, err = gopoly.DecodeCoords(polyline)
+			if err != nil {
+				log.Printf("for file %d, err: %v", activity.Id, err)
+			} else {
+				floatPolylines = append(floatPolylines, polyDecoded)
+			}
+
 		}
-		ids = append(ids, activity.Id)
+
+		templ, _ := template.ParseFiles("index_tmpl.html")
+
+		data := struct {
+			EncodedRoutes [][][]float64
+			MapboxToken   string
+		}{
+			floatPolylines,
+			*mapBoxToken,
+		}
+		templ.Delims("", "")
+
+		templ.Execute(w, data)
+
+	})
+
+	url := conf.AuthCodeURL("state", oauth2.AccessTypeOffline)
+
+	templ, err := template.ParseFiles("static/index_tmpl.html")
+	if err != nil {
+		panic(err)
 	}
-
-	fmt.Printf("Summary distance: %v km\n", summaryDistance/1000)
-	fmt.Printf("Summary elevation gain: %v m\n", summaryEleveation)
-	fmt.Printf("Summary time: %v hours\n", float64(summaryTime)/3600.0)
-	fmt.Printf("Average speed: %v km/h\n", (summaryDistance/1000)/(float64(summaryTime)/3600))
-
-	polylines := []string{}
-
-	activitiesService := strava.NewActivitiesService(client)
-	for _, id := range ids {
-		cachedFileName := fmt.Sprintf("cache/%d.json", id)
-
-		_, err := os.Stat(cachedFileName)
-
-		cacheExists := false
-		if err == nil {
-			cacheExists = true
-		}
-
-		var activity *strava.ActivityDetailed
-
-		if cacheExists {
-			cacheContent, _ := ioutil.ReadFile(cachedFileName)
-			err := json.Unmarshal(cacheContent, &activity)
-			if err != nil {
-				panic(err)
-			}
-		} else {
-			activity, _ = activitiesService.Get(id).Do()
-			serialized, err := json.Marshal(activity)
-			if err != nil {
-				panic(err)
-			}
-			file, err := os.Create(cachedFileName)
-			if err != nil {
-				panic(err)
-			}
-			file.Write(serialized)
-			file.Close()
-		}
-		polylines = append(polylines, floatTuples(activity.Map.Polyline.Decode()).String())
-	}
-
-	templ, _ := template.ParseFiles("index.html")
 	buf := new(bytes.Buffer)
-	data := struct {
-		EncodedRoutes []string
-		MapboxToken   string
-	}{
-		polylines,
-		*mapBoxToken,
-	}
 
+	data := struct{ Auth string }{url}
 	_ = templ.Execute(buf, data)
-
-	file, _ := os.Create("page.html")
+	file, _ := os.Create("static/index.html")
 	defer file.Close()
 	file.Write(buf.Bytes())
 
-}
+	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("./static"))))
 
-type floatTuples [][2]float64
-
-func (ft floatTuples) String() string {
-	ftAsStringList := []string{}
-	for _, elem := range ft {
-		elemStr := "[" + strconv.FormatFloat(elem[0], 'f', 6, 64) + "," + strconv.FormatFloat(elem[1], 'f', 6, 64) + "]"
-		ftAsStringList = append(ftAsStringList, elemStr)
-	}
-
-	return "[" + strings.Join(ftAsStringList, ",") + "]"
+	log.Fatal(http.ListenAndServe(":8888", nil))
 }
