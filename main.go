@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/google/uuid"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -35,6 +36,7 @@ func init() {
 
 var code string
 var token string
+var state string
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
@@ -54,10 +56,16 @@ func main() {
 
 	http.HandleFunc("/auth_callback", func(w http.ResponseWriter, r *http.Request) {
 		code = r.URL.Query().Get("code")
+		callbackState := r.URL.Query().Get("state")
+		if callbackState != state {
+			http.Error(w, fmt.Sprintf("state verification failed"), http.StatusBadRequest)
+			return
+		}
 
 		tok, err := conf.Exchange(ctx, code)
 		if err != nil {
-			fmt.Println("tutaj?", err)
+			http.Error(w, fmt.Sprintf("could not exchange ouath2 token, err: %v", err), http.StatusInternalServerError)
+			return
 		}
 		token = tok.AccessToken
 
@@ -86,6 +94,7 @@ func main() {
 			opts.After = optional.NewInt32(int32(after.Unix()))
 			opts.Before = optional.NewInt32(int32(before.Unix()))
 			opts.Page = optional.NewInt32(int32(i))
+			opts.PerPage = optional.NewInt32(200)
 
 			summary, _, _ := client.ActivitiesApi.GetLoggedInAthleteActivities(ctx, &opts)
 			if len(summary) == 0 {
@@ -94,7 +103,7 @@ func main() {
 			activities = append(activities, summary...)
 		}
 
-		var floatPolylines [][][]float64
+		var polylines [][][]float64
 
 		for _, activity := range activities {
 			cachedFileName := fmt.Sprintf("cache/%d.cache", activity.Id)
@@ -111,7 +120,8 @@ func main() {
 			if cacheExists {
 				cacheContent, err := ioutil.ReadFile(cachedFileName)
 				if err != nil {
-					log.Printf("error when reading %s, err: %v", cachedFileName, err)
+					log.Printf("error when reading %s, skipping, err: %v", cachedFileName, err)
+					continue
 				}
 				polyline = cacheContent
 			} else {
@@ -121,25 +131,29 @@ func main() {
 					continue
 				}
 				if detailed.Map_.Polyline == "" {
-					continue // activity without a map
+					continue
 				}
 				polyline = []byte(detailed.Map_.Polyline)
 
 				file, err := os.Create(cachedFileName)
 				if err != nil {
-					log.Printf("error when creting %s, err: %v", cachedFileName, err)
+					log.Printf("error when creating %s, err: %v", cachedFileName, err)
+					continue
 				}
-				file.Write(polyline)
-				file.Close()
+				defer file.Close()
+				_, err = file.Write(polyline)
+				if err != nil {
+					log.Printf("error when writing to %s, err: %v", cachedFileName, err)
+				}
 			}
 
-			var polyDecoded [][]float64
+			var polylineDecoded [][]float64
 
-			polyDecoded, _, err = gopoly.DecodeCoords(polyline)
+			polylineDecoded, _, err = gopoly.DecodeCoords(polyline)
 			if err != nil {
-				log.Printf("for file %d, err: %v", activity.Id, err)
+				log.Printf("could not decode polyline from file %d, err: %v", activity.Id, err)
 			} else {
-				floatPolylines = append(floatPolylines, polyDecoded)
+				polylines = append(polylines, polylineDecoded)
 			}
 
 		}
@@ -150,17 +164,15 @@ func main() {
 			EncodedRoutes [][][]float64
 			MapboxToken   string
 		}{
-			floatPolylines,
+			polylines,
 			*mapBoxToken,
 		}
-		templ.Delims("", "")
-
 		templ.Execute(w, data)
 
 	})
-
-	url := conf.AuthCodeURL("state", oauth2.AccessTypeOffline)
-
+	state = uuid.New().String()
+	url := conf.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	log.Println(url)
 	templ, err := template.ParseFiles("static/index_tmpl.html")
 	if err != nil {
 		panic(err)
@@ -177,3 +189,8 @@ func main() {
 
 	log.Fatal(http.ListenAndServe(":8888", nil))
 }
+
+
+// figure out caching that will work on app engine
+// try to move to app engine
+// code clean up
