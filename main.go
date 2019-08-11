@@ -161,7 +161,6 @@ func main() {
 	})
 	state = uuid.New().String()
 	url := conf.AuthCodeURL(state, oauth2.AccessTypeOffline)
-	log.Println(url)
 	templ, err := template.ParseFiles("static/index_tmpl.html")
 	if err != nil {
 		panic(err)
