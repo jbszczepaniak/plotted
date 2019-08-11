@@ -1,5 +1,8 @@
 runtime: go111
 
+includes:
+  - env_variables.yml
+
 handlers:
   - url: /.*
     script: auto

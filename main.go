@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
 	"github.com/google/uuid"
 	"html/template"
@@ -13,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	swagger "github.com/jedruniu/plotted/swagger-generated"
+	"github.com/jedruniu/plotted/swagger-generated"
 
 	"github.com/antihax/optional"
 	gopoly "github.com/twpayne/go-polyline"
@@ -24,34 +23,41 @@ import (
 )
 
 var (
-	stravaClientID = flag.String("strava_clientID", "", "Strava client ID")
-	stravaSecret   = flag.String("strava_secret", "", "Strava Secret")
-	mapBoxToken    = flag.String("mapbox", "", "Mapbox API Access token")
-
-	layout = "02/01/2006"
+	stravaClientID string
+	stravaSecret   string
+	mapboxToken    string
+	layout         = "02/01/2006"
+	code           string
+	token          string
+	state          string
+	storage        Storage
 )
 
-func init() {
-	flag.Parse()
-}
-
-var code string
-var token string
-var state string
-var storage Storage
-
 func main() {
+	stravaClientID = os.Getenv("STRAVA_CLIENT_ID")
+	if stravaClientID == "" {
+		panic("STRAVA_CLIENT_ID not provided")
+	}
+	stravaSecret = os.Getenv("STRAVA_SECRET")
+	if stravaSecret == "" {
+		panic("STRAVA_SECRET not provided")
+	}
+	mapboxToken = os.Getenv("MAPBOX_TOKEN")
+	if mapboxToken == "" {
+		panic("MAPBOX_TOKEN not provided")
+	}
+
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 
 	ctx := context.Background()
 	var err error
-	storage, err  = NewFileStorage("cache")
+	storage, err = NewFileStorage("cache")
 	if err != nil {
 		panic(err)
 	}
 	conf := &oauth2.Config{
-		ClientID:     *stravaClientID,
-		ClientSecret: *stravaSecret,
+		ClientID:     stravaClientID,
+		ClientSecret: stravaSecret,
 		Scopes:       []string{"activity:write,activity:read_all,profile:read_all"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://www.strava.com/oauth/authorize",
@@ -135,7 +141,6 @@ func main() {
 				storage.Set(cachedPolyline, polyline)
 			}
 
-
 			var polylineDecoded [][]float64
 
 			polylineDecoded, _, err := gopoly.DecodeCoords(polyline)
@@ -154,7 +159,7 @@ func main() {
 			MapboxToken   string
 		}{
 			polylines,
-			*mapBoxToken,
+			mapboxToken,
 		}
 		templ.Execute(w, data)
 
@@ -186,7 +191,7 @@ type Storage interface {
 }
 
 type FilesStorage struct {
-	cache sync.Map
+	cache  sync.Map
 	prefix string
 }
 
@@ -242,5 +247,5 @@ func NewFileStorage(cacheDir string) (*FilesStorage, error) {
 			return nil, err
 		}
 	}
-	return &FilesStorage{prefix:cacheDir}, nil
+	return &FilesStorage{prefix: cacheDir}, nil
 }
