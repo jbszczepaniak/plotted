@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	swagger "github.com/jedruniu/plotted/swagger-generated"
@@ -69,7 +70,7 @@ func main() {
 		}
 		token = tok.AccessToken
 
-		http.Redirect(w, r, "http://localhost:8888/map?after=30/01/2018&before=30/09/2019", 302)
+		http.Redirect(w, r, "http://localhost:8888/map?after=30/05/2019&before=30/09/2019", 302)
 	})
 
 	http.HandleFunc("/map", func(w http.ResponseWriter, r *http.Request) {
@@ -90,13 +91,17 @@ func main() {
 
 		var activities []swagger.SummaryActivity
 
-		for i := 1; ; i++ {
+		for i := 1; i < 3; i++ {
 			opts.After = optional.NewInt32(int32(after.Unix()))
 			opts.Before = optional.NewInt32(int32(before.Unix()))
 			opts.Page = optional.NewInt32(int32(i))
 			opts.PerPage = optional.NewInt32(200)
 
-			summary, _, _ := client.ActivitiesApi.GetLoggedInAthleteActivities(ctx, &opts)
+			summary, resp, err := client.ActivitiesApi.GetLoggedInAthleteActivities(ctx, &opts)
+			if err != nil {
+				http.Error(w, err.Error(), resp.StatusCode)
+				return
+			}
 			if len(summary) == 0 {
 				break
 			}
@@ -106,25 +111,12 @@ func main() {
 		var polylines [][][]float64
 
 		for _, activity := range activities {
-			cachedFileName := fmt.Sprintf("cache/%d.cache", activity.Id)
-
-			_, err := os.Stat(cachedFileName)
-
-			cacheExists := false
-			if err == nil {
-				cacheExists = true
-			}
-
 			var polyline []byte
 
-			if cacheExists {
-				cacheContent, err := ioutil.ReadFile(cachedFileName)
-				if err != nil {
-					log.Printf("error when reading %s, skipping, err: %v", cachedFileName, err)
-					continue
-				}
-				polyline = cacheContent
-			} else {
+			cachedFileName := fmt.Sprintf("cache/%d.cache", activity.Id)
+			cacheContent, err := ioutil.ReadFile(cachedFileName)
+
+			if err != nil {
 				detailed, _, err := client.ActivitiesApi.GetActivityById(ctx, activity.Id, nil)
 				if err != nil {
 					log.Printf("err for activity %d, err: %v", activity.Id, err)
@@ -145,6 +137,9 @@ func main() {
 				if err != nil {
 					log.Printf("error when writing to %s, err: %v", cachedFileName, err)
 				}
+			} else {
+				log.Printf("cache hit for file %s\n", cachedFileName)
+				polyline = cacheContent
 			}
 
 			var polylineDecoded [][]float64
@@ -181,6 +176,7 @@ func main() {
 
 	data := struct{ Auth string }{url}
 	_ = templ.Execute(buf, data)
+	os.Remove("static/index.html")
 	file, _ := os.Create("static/index.html")
 	defer file.Close()
 	file.Write(buf.Bytes())
@@ -190,7 +186,87 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8888", nil))
 }
 
+type Storage interface {
+	Set(string, []byte) error
+	Get(string) ([]byte, error)
+	Exists(string) (bool, error)
+}
 
-// figure out caching that will work on app engine
+type FilesStorage struct {
+	cache sync.Map
+	prefix string
+}
+
+func (s *FilesStorage) Exists(key string) (bool, error) {
+	cachedFileName := fmt.Sprintf("%s/%s", s.prefix, key)
+	cacheContent, err := ioutil.ReadFile(cachedFileName)
+	if err != nil {
+		return false, err
+	}
+	s.cache.Store(key, cacheContent)
+	return true, nil
+}
+
+func (s *FilesStorage) Get(key string) ([]byte, error) {
+	cachedFileName := fmt.Sprintf("%s/%s", s.prefix, key)
+	v, ok := s.cache.Load(cachedFileName)
+
+	if !ok {
+		cacheContent, err := ioutil.ReadFile(cachedFileName)
+		if err != nil {
+			return []byte{}, err
+		} else {
+			return cacheContent, nil
+		}
+	}
+
+	content, assertOk := v.([]byte)
+	if assertOk {
+		return content, nil
+	}
+	return []byte{}, fmt.Errorf("🤷")
+}
+
+func (s *FilesStorage) Set(key string, value []byte) error {
+	s.cache.Store(key, value)
+	cachedFileName := fmt.Sprintf("%s/%s", s.prefix, key)
+	file, err := os.Create(cachedFileName)
+	if err != nil {
+		return fmt.Errorf("error when creating %s, err: %v", cachedFileName, err)
+	}
+	defer file.Close()
+	_, err = file.Write(value)
+	if err != nil {
+		return fmt.Errorf("error when writing to %s, err: %v", cachedFileName, err)
+	}
+	return nil
+}
+
+func NewFileStorage(cacheDir string) (*FilesStorage, error) {
+	_, err := os.Create(cacheDir)
+	if err != nil {
+		if err != os.ErrExist {
+			return nil, err
+		}
+	}
+	return &FilesStorage{prefix:cacheDir}, nil
+}
 // try to move to app engine
 // code clean up
+//package main
+//
+//import (
+//	"fmt"
+//	"io/ioutil"
+//	"os"
+//)
+//
+//func main() {
+//	cachedFileName := fmt.Sprintf("cache/%d.cache", 9686632701111)
+//	_, err := ioutil.ReadFile(cachedFileName)
+//	if  os.IsNotExist(err) {
+//		fmt.Println(err)
+//	} else {
+//		fmt.Println("coś jebło")
+//	}
+//}
