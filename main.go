@@ -38,12 +38,17 @@ func init() {
 var code string
 var token string
 var state string
+var storage Storage
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 
 	ctx := context.Background()
-
+	var err error
+	storage, err  = NewFileStorage("cache")
+	if err != nil {
+		panic(err)
+	}
 	conf := &oauth2.Config{
 		ClientID:     *stravaClientID,
 		ClientSecret: *stravaSecret,
@@ -113,10 +118,11 @@ func main() {
 		for _, activity := range activities {
 			var polyline []byte
 
-			cachedFileName := fmt.Sprintf("cache/%d.cache", activity.Id)
-			cacheContent, err := ioutil.ReadFile(cachedFileName)
-
-			if err != nil {
+			cachedPolyline := fmt.Sprintf("%d.cache", activity.Id)
+			exists, _ := storage.Exists(cachedPolyline)
+			if exists {
+				polyline, _ = storage.Get(cachedPolyline)
+			} else {
 				detailed, _, err := client.ActivitiesApi.GetActivityById(ctx, activity.Id, nil)
 				if err != nil {
 					log.Printf("err for activity %d, err: %v", activity.Id, err)
@@ -126,25 +132,13 @@ func main() {
 					continue
 				}
 				polyline = []byte(detailed.Map_.Polyline)
-
-				file, err := os.Create(cachedFileName)
-				if err != nil {
-					log.Printf("error when creating %s, err: %v", cachedFileName, err)
-					continue
-				}
-				defer file.Close()
-				_, err = file.Write(polyline)
-				if err != nil {
-					log.Printf("error when writing to %s, err: %v", cachedFileName, err)
-				}
-			} else {
-				log.Printf("cache hit for file %s\n", cachedFileName)
-				polyline = cacheContent
+				storage.Set(cachedPolyline, polyline)
 			}
+
 
 			var polylineDecoded [][]float64
 
-			polylineDecoded, _, err = gopoly.DecodeCoords(polyline)
+			polylineDecoded, _, err := gopoly.DecodeCoords(polyline)
 			if err != nil {
 				log.Printf("could not decode polyline from file %d, err: %v", activity.Id, err)
 			} else {
@@ -243,9 +237,9 @@ func (s *FilesStorage) Set(key string, value []byte) error {
 }
 
 func NewFileStorage(cacheDir string) (*FilesStorage, error) {
-	_, err := os.Create(cacheDir)
+	err := os.Mkdir(cacheDir, 0777)
 	if err != nil {
-		if err != os.ErrExist {
+		if !os.IsExist(err) {
 			return nil, err
 		}
 	}
