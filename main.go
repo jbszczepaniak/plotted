@@ -245,22 +245,3 @@ func NewFileStorage(cacheDir string) (*FilesStorage, error) {
 	}
 	return &FilesStorage{prefix:cacheDir}, nil
 }
-// try to move to app engine
-// code clean up
-//package main
-//
-//import (
-//	"fmt"
-//	"io/ioutil"
-//	"os"
-//)
-//
-//func main() {
-//	cachedFileName := fmt.Sprintf("cache/%d.cache", 9686632701111)
-//	_, err := ioutil.ReadFile(cachedFileName)
-//	if  os.IsNotExist(err) {
-//		fmt.Println(err)
-//	} else {
-//		fmt.Println("coś jebło")
-//	}
-//}
