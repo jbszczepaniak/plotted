@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cloud.google.com/go/firestore"
 	"context"
 	"fmt"
 	"github.com/google/uuid"
@@ -9,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -26,6 +28,11 @@ var (
 	stravaClientID string
 	stravaSecret   string
 	mapboxToken    string
+	port           int
+	environment    string
+	projectID      string
+	host           string
+	httpScheme     string
 	layout         = "02/01/2006"
 	code           string
 	token          string
@@ -34,6 +41,29 @@ var (
 )
 
 func main() {
+	// Google App Engine specific environment variables
+	var err error
+	port, err = strconv.Atoi(os.Getenv("PORT"))
+	if err != nil {
+		panic("PORT not provided, or not an integer")
+	}
+	projectID = os.Getenv("GCP_PROJECT")
+	if projectID == "" {
+		panic("GCP_PROJECT not provided")
+	}
+	environment = os.Getenv("NODE_ENV")
+	if environment == "" {
+		panic("NODE_ENV not provided")
+	}
+	if environment == "production" {
+		host = fmt.Sprintf("%s-appspot.com", projectID)
+		httpScheme = "https"
+	} else {
+		host = "localhost"
+		httpScheme = "http"
+	}
+
+	// Application specific environment variables
 	stravaClientID = os.Getenv("STRAVA_CLIENT_ID")
 	if stravaClientID == "" {
 		panic("STRAVA_CLIENT_ID not provided")
@@ -50,8 +80,13 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 
 	ctx := context.Background()
-	var err error
-	storage, err = NewFileStorage("cache")
+
+	if environment == "production" {
+		storage, err = NewGoogleStorage(ctx, projectID)
+	} else {
+		storage, err = NewFileStorage("cache")
+	}
+
 	if err != nil {
 		panic(err)
 	}
@@ -63,7 +98,7 @@ func main() {
 			AuthURL:  "https://www.strava.com/oauth/authorize",
 			TokenURL: "https://www.strava.com/oauth/token",
 		},
-		RedirectURL: "http://localhost:8888/auth_callback",
+		RedirectURL: fmt.Sprintf("%s://%s:%d/auth_callback", httpScheme, host, port),
 	}
 
 	http.HandleFunc("/auth_callback", func(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +116,7 @@ func main() {
 		}
 		token = tok.AccessToken
 
-		http.Redirect(w, r, "http://localhost:8888/map?after=30/05/2019&before=30/09/2019", 302)
+		http.Redirect(w, r, fmt.Sprintf("%s://%s:%d/map?after=30/05/2019&before=30/09/2019", httpScheme, host, port), 302)
 	})
 
 	http.HandleFunc("/map", func(w http.ResponseWriter, r *http.Request) {
@@ -125,9 +160,9 @@ func main() {
 			var polyline []byte
 
 			cachedPolyline := fmt.Sprintf("%d.cache", activity.Id)
-			exists, _ := storage.Exists(cachedPolyline)
+			exists, _ := storage.Exists(ctx, cachedPolyline)
 			if exists {
-				polyline, _ = storage.Get(cachedPolyline)
+				polyline, _ = storage.Get(ctx, cachedPolyline)
 			} else {
 				detailed, _, err := client.ActivitiesApi.GetActivityById(ctx, activity.Id, nil)
 				if err != nil {
@@ -138,7 +173,7 @@ func main() {
 					continue
 				}
 				polyline = []byte(detailed.Map_.Polyline)
-				storage.Set(cachedPolyline, polyline)
+				storage.Set(ctx, cachedPolyline, polyline)
 			}
 
 			var polylineDecoded [][]float64
@@ -180,14 +215,14 @@ func main() {
 	file.Write(buf.Bytes())
 
 	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("./static"))))
-
-	log.Fatal(http.ListenAndServe(":8888", nil))
+	log.Printf("Listening on port %d\n", port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }
 
 type Storage interface {
-	Set(string, []byte) error
-	Get(string) ([]byte, error)
-	Exists(string) (bool, error)
+	Set(context.Context, string, []byte) error
+	Get(context.Context, string) ([]byte, error)
+	Exists(context.Context, string) (bool, error)
 }
 
 type FilesStorage struct {
@@ -195,7 +230,7 @@ type FilesStorage struct {
 	prefix string
 }
 
-func (s *FilesStorage) Exists(key string) (bool, error) {
+func (s *FilesStorage) Exists(ctx context.Context, key string) (bool, error) {
 	cachedFileName := fmt.Sprintf("%s/%s", s.prefix, key)
 	cacheContent, err := ioutil.ReadFile(cachedFileName)
 	if err != nil {
@@ -205,7 +240,7 @@ func (s *FilesStorage) Exists(key string) (bool, error) {
 	return true, nil
 }
 
-func (s *FilesStorage) Get(key string) ([]byte, error) {
+func (s *FilesStorage) Get(ctx context.Context, key string) ([]byte, error) {
 	cachedFileName := fmt.Sprintf("%s/%s", s.prefix, key)
 	v, ok := s.cache.Load(cachedFileName)
 
@@ -225,7 +260,7 @@ func (s *FilesStorage) Get(key string) ([]byte, error) {
 	return []byte{}, fmt.Errorf("🤷")
 }
 
-func (s *FilesStorage) Set(key string, value []byte) error {
+func (s *FilesStorage) Set(ctx context.Context, key string, value []byte) error {
 	s.cache.Store(key, value)
 	cachedFileName := fmt.Sprintf("%s/%s", s.prefix, key)
 	file, err := os.Create(cachedFileName)
@@ -248,4 +283,46 @@ func NewFileStorage(cacheDir string) (*FilesStorage, error) {
 		}
 	}
 	return &FilesStorage{prefix: cacheDir}, nil
+}
+
+type GoogleStorage struct {
+	collection *firestore.CollectionRef
+}
+
+func NewGoogleStorage(ctx context.Context, projectID string) (*GoogleStorage, error) {
+	client, err := firestore.NewClient(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	collection := client.Collection("cache")
+	return &GoogleStorage{collection: collection}, nil
+}
+
+func (g *GoogleStorage) Set(ctx context.Context, key string,  value []byte) error {
+	doc := g.collection.Doc(key)
+	_, err := doc.Set(ctx, value)
+	return err
+}
+
+func (g *GoogleStorage) Get(ctx context.Context, key string) ([]byte, error) {
+	doc := g.collection.Doc(key)
+	docSnapshot, err := doc.Get(ctx)
+	if err != nil {
+		return []byte{}, err
+	}
+	var  toReturn []byte
+	err = docSnapshot.DataTo(toReturn)
+	if err != nil {
+		return []byte{}, err
+	}
+	return toReturn, nil
+}
+
+func (g *GoogleStorage) Exists(ctx context.Context, key string) (bool, error) {
+	doc := g.collection.Doc(key)
+	docSnapshot, err := doc.Get(ctx)
+	if err != nil {
+		return false, err
+	}
+	return docSnapshot.Exists(), nil
 }
