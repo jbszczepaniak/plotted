@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"google.golang.org/appengine"
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -47,20 +48,9 @@ func main() {
 	if err != nil {
 		panic("PORT not provided, or not an integer")
 	}
-	projectID = os.Getenv("GCP_PROJECT")
-	if projectID == "" {
-		panic("GCP_PROJECT not provided")
-	}
 	environment = os.Getenv("NODE_ENV")
 	if environment == "" {
-		panic("NODE_ENV not provided")
-	}
-	if environment == "production" {
-		host = fmt.Sprintf("%s-appspot.com", projectID)
-		httpScheme = "https"
-	} else {
-		host = "localhost"
-		httpScheme = "http"
+		environment = "dev"
 	}
 
 	// Application specific environment variables
@@ -79,7 +69,18 @@ func main() {
 
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 
-	ctx := context.Background()
+	ctx := appengine.BackgroundContext()
+	projectID = appengine.AppID(ctx)
+
+	log.Println(projectID)
+	if environment == "production" {
+		host = fmt.Sprintf("%s-appspot.com", projectID)
+		httpScheme = "https"
+	} else {
+		host = "localhost"
+		httpScheme = "http"
+	}
+	log.Printf("environment is %s, host is %s", environment, host)
 
 	if environment == "production" {
 		storage, err = NewGoogleStorage(ctx, projectID)
@@ -102,6 +103,7 @@ func main() {
 	}
 
 	http.HandleFunc("/auth_callback", func(w http.ResponseWriter, r *http.Request) {
+		reqCtx := r.Context()
 		code = r.URL.Query().Get("code")
 		callbackState := r.URL.Query().Get("state")
 		if callbackState != state {
@@ -109,7 +111,7 @@ func main() {
 			return
 		}
 
-		tok, err := conf.Exchange(ctx, code)
+		tok, err := conf.Exchange(reqCtx, code)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("could not exchange ouath2 token, err: %v", err), http.StatusInternalServerError)
 			return
@@ -120,10 +122,11 @@ func main() {
 	})
 
 	http.HandleFunc("/map", func(w http.ResponseWriter, r *http.Request) {
+		reqCtx := r.Context()
 		cfg := swagger.NewConfiguration()
 		client := swagger.NewAPIClient(cfg)
 
-		ctx = context.WithValue(ctx, swagger.ContextAccessToken, token)
+		reqCtx = context.WithValue(reqCtx, swagger.ContextAccessToken, token)
 
 		opts := swagger.GetLoggedInAthleteActivitiesOpts{}
 
@@ -137,13 +140,13 @@ func main() {
 
 		var activities []swagger.SummaryActivity
 
-		for i := 1; i < 3; i++ {
+		for i := 1; ; i++ {
 			opts.After = optional.NewInt32(int32(after.Unix()))
 			opts.Before = optional.NewInt32(int32(before.Unix()))
 			opts.Page = optional.NewInt32(int32(i))
 			opts.PerPage = optional.NewInt32(200)
 
-			summary, resp, err := client.ActivitiesApi.GetLoggedInAthleteActivities(ctx, &opts)
+			summary, resp, err := client.ActivitiesApi.GetLoggedInAthleteActivities(reqCtx, &opts)
 			if err != nil {
 				http.Error(w, err.Error(), resp.StatusCode)
 				return
@@ -160,11 +163,11 @@ func main() {
 			var polyline []byte
 
 			cachedPolyline := fmt.Sprintf("%d.cache", activity.Id)
-			exists, _ := storage.Exists(ctx, cachedPolyline)
+			exists, _ := storage.Exists(reqCtx, cachedPolyline)
 			if exists {
-				polyline, _ = storage.Get(ctx, cachedPolyline)
+				polyline, _ = storage.Get(reqCtx, cachedPolyline)
 			} else {
-				detailed, _, err := client.ActivitiesApi.GetActivityById(ctx, activity.Id, nil)
+				detailed, _, err := client.ActivitiesApi.GetActivityById(reqCtx, activity.Id, nil)
 				if err != nil {
 					log.Printf("err for activity %d, err: %v", activity.Id, err)
 					continue
@@ -173,14 +176,14 @@ func main() {
 					continue
 				}
 				polyline = []byte(detailed.Map_.Polyline)
-				storage.Set(ctx, cachedPolyline, polyline)
+				storage.Set(reqCtx, cachedPolyline, polyline)
 			}
 
 			var polylineDecoded [][]float64
 
 			polylineDecoded, _, err := gopoly.DecodeCoords(polyline)
 			if err != nil {
-				log.Printf("could not decode polyline from file %d, err: %v", activity.Id, err)
+				log.Printf( "could not decode polyline from file %d, err: %v", activity.Id, err)
 			} else {
 				polylines = append(polylines, polylineDecoded)
 			}
@@ -298,7 +301,7 @@ func NewGoogleStorage(ctx context.Context, projectID string) (*GoogleStorage, er
 	return &GoogleStorage{collection: collection}, nil
 }
 
-func (g *GoogleStorage) Set(ctx context.Context, key string,  value []byte) error {
+func (g *GoogleStorage) Set(ctx context.Context, key string, value []byte) error {
 	doc := g.collection.Doc(key)
 	_, err := doc.Set(ctx, value)
 	return err
@@ -310,7 +313,7 @@ func (g *GoogleStorage) Get(ctx context.Context, key string) ([]byte, error) {
 	if err != nil {
 		return []byte{}, err
 	}
-	var  toReturn []byte
+	var toReturn []byte
 	err = docSnapshot.DataTo(toReturn)
 	if err != nil {
 		return []byte{}, err
