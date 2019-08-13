@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	//"google.golang.org/api/option"
 	"google.golang.org/appengine"
 	"html/template"
 	"io/ioutil"
@@ -74,7 +75,8 @@ func main() {
 
 	log.Println(projectID)
 	if environment == "production" {
-		host = fmt.Sprintf("%s-appspot.com", projectID)
+		// get it from appengine library ready
+		host = fmt.Sprintf("%s.appspot.com", projectID)
 		httpScheme = "https"
 	} else {
 		host = "localhost"
@@ -99,6 +101,7 @@ func main() {
 			AuthURL:  "https://www.strava.com/oauth/authorize",
 			TokenURL: "https://www.strava.com/oauth/token",
 		},
+		// w callbacku dla GCP nie może byc portu :)
 		RedirectURL: fmt.Sprintf("%s://%s:%d/auth_callback", httpScheme, host, port),
 	}
 
@@ -293,6 +296,10 @@ type GoogleStorage struct {
 }
 
 func NewGoogleStorage(ctx context.Context, projectID string) (*GoogleStorage, error) {
+	// tylko w developmencie
+	//sa := option.WithCredentialsFile("/Users/jedrzejszczepaniak/.glcloud-secret/plotted-207513-5b6b79013df9.json")
+	//client, err := firestore.NewClient(ctx, projectID, sa)
+
 	client, err := firestore.NewClient(ctx, projectID)
 	if err != nil {
 		return nil, err
