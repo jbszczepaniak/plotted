@@ -2,12 +2,11 @@ package main
 
 import (
 	"bytes"
-	"cloud.google.com/go/firestore"
 	"context"
 	"fmt"
-	"github.com/google/uuid"
-	//"google.golang.org/api/option"
-	"google.golang.org/appengine"
+
+	"cloud.google.com/go/firestore"
+
 	"html/template"
 	"io/ioutil"
 	"log"
@@ -16,7 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jedruniu/plotted/swagger-generated"
+	"google.golang.org/appengine"
+
+	swagger "github.com/jedruniu/plotted/swagger-generated"
 
 	"github.com/antihax/optional"
 	gopoly "github.com/twpayne/go-polyline"
@@ -33,8 +34,7 @@ var (
 	port           int
 	environment    string
 	projectID      string
-	host           string
-	httpScheme     string
+	selfUrl        string
 	layout         = "02/01/2006"
 	code           string
 	token          string
@@ -75,14 +75,10 @@ func main() {
 
 	log.Println(projectID)
 	if environment == "production" {
-		// get it from appengine library ready
-		host = fmt.Sprintf("%s.appspot.com", projectID)
-		httpScheme = "https"
+		selfUrl = fmt.Sprintf("https://%s.appspot.com", projectID)
 	} else {
-		host = "localhost"
-		httpScheme = "http"
+		selfUrl = fmt.Sprintf("http://localhost:%d", port)
 	}
-	log.Printf("environment is %s, host is %s", environment, host)
 
 	if environment == "production" {
 		storage, err = NewGoogleStorage(ctx, projectID)
@@ -102,7 +98,7 @@ func main() {
 			TokenURL: "https://www.strava.com/oauth/token",
 		},
 		// w callbacku dla GCP nie może byc portu :)
-		RedirectURL: fmt.Sprintf("%s://%s:%d/auth_callback", httpScheme, host, port),
+		RedirectURL: fmt.Sprintf("%s/auth_callback", selfUrl),
 	}
 
 	http.HandleFunc("/auth_callback", func(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +117,7 @@ func main() {
 		}
 		token = tok.AccessToken
 
-		http.Redirect(w, r, fmt.Sprintf("%s://%s:%d/map?after=30/05/2019&before=30/09/2019", httpScheme, host, port), 302)
+		http.Redirect(w, r, fmt.Sprintf("%s/map?after=30/05/2019&before=30/09/2019", selfUrl), 302)
 	})
 
 	http.HandleFunc("/map", func(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +182,7 @@ func main() {
 
 			polylineDecoded, _, err := gopoly.DecodeCoords(polyline)
 			if err != nil {
-				log.Printf( "could not decode polyline from file %d, err: %v", activity.Id, err)
+				log.Printf("could not decode polyline from file %d, err: %v", activity.Id, err)
 			} else {
 				polylines = append(polylines, polylineDecoded)
 			}
@@ -205,7 +201,7 @@ func main() {
 		templ.Execute(w, data)
 
 	})
-	state = uuid.New().String()
+	state = "uuid.New().String()"
 	url := conf.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	templ, err := template.ParseFiles("static/index_tmpl.html")
 	if err != nil {
