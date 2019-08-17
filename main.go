@@ -92,7 +92,7 @@ func main() {
 	conf := &oauth2.Config{
 		ClientID:     stravaClientID,
 		ClientSecret: stravaSecret,
-		Scopes:       []string{"activity:write,activity:read_all,profile:read_all"},
+		Scopes:       []string{"activity:read_all"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://www.strava.com/oauth/authorize",
 			TokenURL: "https://www.strava.com/oauth/token",
