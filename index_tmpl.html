@@ -15,9 +15,16 @@
   <body>
     <div id="mapid"></div>
     <script>
+      function rand(min, max) {
+        return parseInt(Math.random() * (max-min+1), 10) + min;
+      }
       function getRandomColor() {
-        return "#" + Math.round(((Math.random() * 70) + 100)*1000)
-      } 
+        var h = rand(200, 220);
+        var s = rand(70, 100);
+        var l = rand(20, 50);
+        return 'hsl(' + h + ',' + s + '%,' + l + '%)';
+      }
+
         var mymap = L.map('mapid').setView([52.380000, 16.920000] , 12);
         L.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={{.MapboxToken}}', {
             maxZoom: 18,
