@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -38,7 +37,7 @@ var (
 	layout         = "02/01/2006"
 	code           string
 	token          string
-	state          string
+	state          = "uuid.New().String()" // make it session identifier.
 	storage        Storage
 )
 
@@ -119,7 +118,6 @@ func main() {
 
 		http.Redirect(w, r, fmt.Sprintf("%s/map?after=30/05/2019&before=30/09/2019", selfUrl), 302)
 	})
-
 	http.HandleFunc("/map", func(w http.ResponseWriter, r *http.Request) {
 		reqCtx := r.Context()
 		cfg := swagger.NewConfiguration()
@@ -201,22 +199,24 @@ func main() {
 		templ.Execute(w, data)
 
 	})
-	state = "uuid.New().String()"
-	url := conf.AuthCodeURL(state, oauth2.AccessTypeOffline)
-	templ, err := template.ParseFiles("static/index_tmpl.html")
-	if err != nil {
-		panic(err)
-	}
-	buf := new(bytes.Buffer)
 
-	data := struct{ Auth string }{url}
-	_ = templ.Execute(buf, data)
-	os.Remove("static/index.html")
-	file, _ := os.Create("static/index.html")
-	defer file.Close()
-	file.Write(buf.Bytes())
+	http.Handle("/static/", http.StripPrefix("/static", http.FileServer(http.Dir("./static"))))
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		log.Println("requect received.")
 
-	http.Handle("/", http.StripPrefix("/", http.FileServer(http.Dir("./static"))))
+		url := conf.AuthCodeURL(state, oauth2.AccessTypeOffline)
+
+		templ, err := template.ParseFiles("static/index_tmpl.html")
+		if err != nil {
+			panic(err)
+		}
+
+		data := struct{ Auth string }{url}
+		_ = templ.Execute(w, data)
+
+	})
+
+
 	log.Printf("Listening on port %d\n", port)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }
