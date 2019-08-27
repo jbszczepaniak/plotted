@@ -1,3 +1,44 @@
+package handlers
+
+// I know this is dummy but I didn't want to fight with GAE to have
+// html templates in custom place.
+
+var IndexHTML = `<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Title</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
+              integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+    </head>
+    <style>
+        .center {
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            width: 50%;
+        }
+    </style>
+    <body>
+        <div class="container">
+            <div class="row" >
+                <div class="col-12 align-self-center">
+                        <h1>
+                           <p class="text-center font-weight-light">Plot your activities with plotted!</p>
+                        </h1>
+                        ​<picture class="text-center">
+                            <a class="center" href="{{.Auth}}">
+                                <img src="static/btn_strava_connectwith_orange.svg" class="shadow p-3 mb-5 bg-white rounded"/>
+                            </a>
+                        </picture>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
+`
+
+var MapHTML = `
 <html>
   <head>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.1/dist/leaflet.css"
@@ -49,3 +90,4 @@
       </script>
   </body>
 </html>
+`

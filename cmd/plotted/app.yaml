@@ -6,3 +6,6 @@ includes:
 handlers:
   - url: /.*
     script: auto
+  - url: /static
+    static_dir: ../../static
+

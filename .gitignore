@@ -1,4 +1,5 @@
 .DS_Store
-env_variables.yml
 .idea
-cache/
+
+cmd/plotted/env_variables.yml
+store/
