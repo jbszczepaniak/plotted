@@ -95,7 +95,7 @@ func (m *MapServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			activitiesMutex.Unlock()
 		}(i)
 		if i%5 == 0 {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(1000 * time.Millisecond)
 		}
 	}
 	summaryWg.Wait()
