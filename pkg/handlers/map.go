@@ -71,13 +71,19 @@ func (m *MapServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			opts.Before = optional.NewInt32(int32(before.Unix()))
 			opts.Page = optional.NewInt32(int32(i))
 			opts.PerPage = optional.NewInt32(200)
-			summary, _, err := client.ActivitiesApi.GetLoggedInAthleteActivities(reqCtx, &opts)
+			summary, resp, err := client.ActivitiesApi.GetLoggedInAthleteActivities(reqCtx, &opts)
 			if err != nil {
-				fmt.Printf("Error for page %dretutned empty\n", i)
+				fmt.Printf("error %v for page %d, do not fetch anymore\n	", err, i)
+				shouldFetch = false
+				return
+			}
+			if resp.StatusCode != http.StatusOK {
+				fmt.Printf("status code %d for page %d, do not fetch anymore\n", resp.StatusCode, i)
+				shouldFetch = false
 				return
 			}
 			if len(summary) == 0 {
-				fmt.Printf("Page %dretutned empty\n", i)
+				fmt.Printf("page %dreturned empty, do not fetch anymore\n", i)
 				shouldFetch = false
 				return
 
