@@ -145,6 +145,7 @@ var MapHTML = `
         padding: 0;
         flex-direction: column;
         justify-content: space-between;
+        height: 100%;
       }
       #controls {
         padding: 10px;
