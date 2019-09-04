@@ -135,12 +135,78 @@ var MapHTML = `
     crossorigin=""></script>
     <script type="text/javascript" src="https://rawgit.com/jieter/Leaflet.encoded/master/Polyline.encoded.js"></script>
     <style>
-      #mapid { height: 100%; }
+      *,*::before,*::after { box-sizing:border-box; }
+      body, input, button {
+        font-family: sans-serif;
+      }
+      body {
+        display: flex;
+        margin: 0;
+        padding: 0;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      #controls {
+        padding: 10px;
+        text-align: center;
+        display:flex;
+        justify-content: center;
+        width: 100%;
+        align-items: center;
+        margin: 0;
+      }
+      #controls input {
+        border: 0;
+        padding: 5px 10px;
+        max-width: 300px;
+        border-bottom: 2px solid #ddd;
+        margin: 2px 5px;
+        color: rgba(0,0,0,0.6);
+        transition: color  .3s ease-in-out, border-bottom .3s ease-in-out;
+      }
+      #controls input:focus {
+        border-bottom-color: rgba(250,104,0,1);
+        outline: 0;
+        color: rgba(0,0,0,1);
+      }
+      #controls button {
+        border: 0;
+        padding: 5px 10px;
+        margin: 2px 5px;
+        background: rgba(250,104,0 ,1);
+        color: #fff;
+        border-radius: 2px;
+      }
+      #mapid {
+        flex-grow: 1;
+      }
     </style>
   </head>
   <body>
+    <form id="controls" method="get" action="">
+      <input type="text" name="after" id="after">
+      <input type="text" name="before" id="before">
+      <input type="hidden" name="state" id="state">
+      <button>OK</button>
+    </form>
     <div id="mapid"></div>
     <script>
+      var afterInput = document.getElementById('after');
+      var beforeInput = document.getElementById('before');
+      var stateInput = document.getElementById('state');
+
+      afterInput.value = getParameterByName('after', location.search);
+      beforeInput.value = getParameterByName('before', location.search);
+      stateInput.value = getParameterByName('state', location.search);
+      
+      function getParameterByName(name, url) {
+          name = name.replace(/[\[\]]/g, '\\$&');
+          var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+              results = regex.exec(url);
+          if (!results) return null;
+          if (!results[2]) return '';
+          return decodeURIComponent(results[2].replace(/\+/g, ' '));
+      }
       function rand(min, max) {
         return parseInt(Math.random() * (max-min+1), 10) + min;
       }
