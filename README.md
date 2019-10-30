@@ -1,5 +1,5 @@
 # Plotted
-CLI tool that plots your Strava activities on a map.
+Plots your Strava activities on a map.
 ![screenshot](screen_shot.png)
 
 ## Why?
@@ -8,7 +8,7 @@ I wanted to have a tool that will plot all my routes from given period on a sing
 ## Prerequisities
 1. Account on https://www.strava.com account with something to plot, and application created on the https://www.strava.com/settings/api. 
 2. Account on https://www.mapbox.com
-3. Get access tokens from abovementioned websites.
+3. Access tokens from abovementioned websites.
 
 ## Getting started
 1. Clone this repository

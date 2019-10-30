@@ -24,12 +24,15 @@ var (
 	port           int
 	environment    string
 	projectID      string
-	selfUrl        string
+	selfURL        string
+	gaeUsed        bool
 	cache          storage.Storage
 	stateStore     storage.Storage
 )
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Llongfile)
+
 	// Google App Engine specific environment variables
 	var err error
 	port, err = strconv.Atoi(os.Getenv("PORT"))
@@ -55,26 +58,17 @@ func main() {
 		panic("MAPBOX_TOKEN not provided")
 	}
 
-	log.SetFlags(log.LstdFlags | log.Llongfile)
-
-	ctx := appengine.BackgroundContext()
-	projectID = appengine.AppID(ctx)
-
 	if environment == "production" {
-		selfUrl = fmt.Sprintf("https://%s.appspot.com", projectID)
-	} else {
-		selfUrl = fmt.Sprintf("http://localhost:%d", port)
-	}
+		ctx := appengine.BackgroundContext()
+		projectID = appengine.AppID(ctx)
 
-	if environment == "production" {
+		selfURL = fmt.Sprintf("https://%s.appspot.com", projectID)
 		cache, err = googleStorage.NewGoogleStorage(ctx, projectID, "store")
 		stateStore, err = googleStorage.NewGoogleStorage(ctx, projectID, "state_to_token")
 	} else {
+		selfURL = fmt.Sprintf("http://localhost:%d", port)
 		cache, err = fileStorage.NewFileStorage("../../store")
 		stateStore, err = fileStorage.NewFileStorage("../../store")
-	}
-	if err != nil {
-		panic(err)
 	}
 
 	conf := &oauth2.Config{
@@ -85,11 +79,11 @@ func main() {
 			AuthURL:  "https://www.strava.com/oauth/authorize",
 			TokenURL: "https://www.strava.com/oauth/token",
 		},
-		RedirectURL: fmt.Sprintf("%s/auth_callback", selfUrl),
+		RedirectURL: fmt.Sprintf("%s/auth_callback", selfURL),
 	}
 
 	mapServer := handlers.MapServer{conf, mapboxToken, cache, stateStore}
-	authServer := handlers.AuthCallbackServer{conf, selfUrl, stateStore}
+	authServer := handlers.AuthCallbackServer{conf, selfURL, stateStore}
 	indexServer := handlers.IndexServer{conf, stateStore}
 
 	http.Handle("/auth_callback", &authServer)
