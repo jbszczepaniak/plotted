@@ -63,11 +63,5 @@ func (s *FilesStorage) Set(ctx context.Context, key string, value []byte) error 
 }
 
 func NewFileStorage(dir string) (*FilesStorage, error) {
-	err := os.Mkdir(dir, 0777)
-	if err != nil {
-		if !os.IsExist(err) {
-			return nil, err
-		}
-	}
 	return &FilesStorage{dir: dir}, nil
 }

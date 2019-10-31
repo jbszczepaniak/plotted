@@ -18,17 +18,18 @@ import (
 )
 
 var (
-	stravaClientID string
-	stravaSecret   string
-	mapboxToken    string
-	port           int
-	environment    string
-	projectID      string
-	selfURL        string
-	gaeUsed        bool
-	gaeCredentials string
-	cache          storage.Storage
-	stateStore     storage.Storage
+	stravaClientID  string
+	stravaSecret    string
+	mapboxToken     string
+	port            int
+	environment     string
+	projectID       string
+	selfURL         string
+	gaeUsed         bool
+	gaeCredentials  string
+	fileStoragePath string
+	cache           storage.Storage
+	stateStore      storage.Storage
 )
 
 func main() {
@@ -59,6 +60,12 @@ func main() {
 	if mapboxToken == "" {
 		panic("MAPBOX_TOKEN not provided")
 	}
+	fileStoragePath = os.Getenv("FILE_STORAGE_PATH")
+	if fileStoragePath != "" {
+		if _, err := os.Stat(fileStoragePath); os.IsNotExist(err) {
+			panic(fmt.Sprintf("provided FILE_STORAGE_PATH=%s does not exist", fileStoragePath))
+		}
+	}
 
 	if environment == "production" {
 		ctx := appengine.BackgroundContext()
@@ -69,8 +76,8 @@ func main() {
 		stateStore, err = googleStorage.NewGoogleStorage(ctx, gaeCredentials, projectID, "state_to_token")
 	} else {
 		selfURL = fmt.Sprintf("http://localhost:%d", port)
-		cache, err = fileStorage.NewFileStorage("../../store")
-		stateStore, err = fileStorage.NewFileStorage("../../store")
+		cache, err = fileStorage.NewFileStorage(fileStoragePath)
+		stateStore, err = fileStorage.NewFileStorage(fileStoragePath)
 	}
 
 	conf := &oauth2.Config{
