@@ -1,17 +1,19 @@
-# Plotted
+# plotted
 Plots your Strava activities on a map.
-![screenshot](screen_shot.png)
+![welcome](welcome_screen.png)
+![map](map.png)
 
 ## Why?
-I wanted to have a tool that will plot all my routes from given period on a single map.
+I wanted to have a tool that will plot all my routes from given period on a single map. It's just fun to watch it. Also it gives me information what is still to explore! 
 
 ## Prerequisities
-1. Account on https://www.strava.com account with something to plot, and application created on the https://www.strava.com/settings/api. 
+1. Account on https://www.strava.com account with trainings to plot, and application created on the https://www.strava.com/settings/api.
 2. Account on https://www.mapbox.com
 3. Access tokens from abovementioned websites.
+4. At least Go 1.11 installed
 
 ## Getting started
-1. Clone this repository
+1. Clone this repository outside your GOPATH, and `cd` into it.
 2. Build application
 ```
 go build
