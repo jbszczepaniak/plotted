@@ -4,18 +4,23 @@ import (
 	"context"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/option"
 )
 
 type GoogleStorage struct {
 	collection *firestore.CollectionRef
 }
 
-func NewGoogleStorage(ctx context.Context, projectID, collectionName string) (*GoogleStorage, error) {
-	// tylko w developmencie
-	//sa := option.WithCredentialsFile("/Users/jedrzejszczepaniak/.glcloud-secret/plotted-207513-5b6b79013df9.json")
-	//client, err := firestore.NewClient(ctx, projectID, sa)
+func NewGoogleStorage(ctx context.Context, gaeCredentials, projectID, collectionName string) (*GoogleStorage, error) {
+	clientOpts := []option.ClientOption{}
+	if gaeCredentials != "" {
+		// in loval development this allows connection with Google Storage
+		clientOpts = append(clientOpts, option.WithCredentialsFile(gaeCredentials))
+	}
 
-	client, err := firestore.NewClient(ctx, projectID)
+	client, err := firestore.NewClient(ctx, projectID, clientOpts...)
+
+	// client, err := firestore.NewClient(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
