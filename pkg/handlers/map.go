@@ -133,7 +133,7 @@ func (m *MapServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 				err = m.Cache.Set(reqCtx, cachedPolyline, polyline)
 				if err != nil {
-					panic(err)
+					http.Error(w, fmt.Sprintf("could not save polyline in cache"), http.StatusBadRequest)
 				}
 			}
 
@@ -151,7 +151,10 @@ func (m *MapServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 
-	tmpl, _ := template.New("").Parse(MapHTML)
+	tmpl, err := template.New("").Parse(MapHTML)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("parsing html file failed"), http.StatusBadRequest)
+	}
 
 	data := struct {
 		EncodedRoutes [][][]float64
@@ -162,7 +165,7 @@ func (m *MapServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	err = tmpl.Execute(w, data)
 	if err != nil {
-		panic(err)
+		log.Printf("executing template failed, err: %v", err)
 	}
 
 }

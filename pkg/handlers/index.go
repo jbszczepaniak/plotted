@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -19,17 +21,20 @@ func (i *IndexServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	err := i.StateStore.Set(r.Context(), state, []byte{})
 	if err != nil {
-		panic(err)
+		http.Error(w, fmt.Sprintf("could not set state information in the store"), http.StatusBadRequest)
 	}
 
 	url := i.OauthConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
 
 	tmpl, err := template.New("").Parse(IndexHTML)
 	if err != nil {
-		panic(err)
+		http.Error(w, fmt.Sprintf("parsing html file failed"), http.StatusBadRequest)
 	}
 
 	data := struct{ Auth string }{url}
-	_ = tmpl.Execute(w, data)
+	err = tmpl.Execute(w, data)
+	if err != nil {
+		log.Printf("executing template failed, err: %v", err)
+	}
 
 }

@@ -20,7 +20,8 @@ func (a *AuthCallbackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	callbackState := r.URL.Query().Get("state")
 	ok, err := a.StateStore.Exists(reqCtx, callbackState)
 	if err != nil {
-		panic(err)
+		http.Error(w, fmt.Sprintf("could not retrieve state information from store"), http.StatusBadRequest)
+		return
 	}
 	if !ok {
 		http.Error(w, fmt.Sprintf("state verification failed"), http.StatusBadRequest)
@@ -34,7 +35,8 @@ func (a *AuthCallbackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	err = a.StateStore.Set(reqCtx, callbackState, []byte(token.AccessToken))
 	if err != nil {
-		panic(err)
+		http.Error(w, fmt.Sprintf("could not set state information in the store"), http.StatusBadRequest)
+		return
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("%s/map?after=30/05/2019&before=30/09/2019&state=%s", a.SelfURL, callbackState), 302)
