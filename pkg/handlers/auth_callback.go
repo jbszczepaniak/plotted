@@ -2,9 +2,10 @@ package handlers
 
 import (
 	"fmt"
+	"net/http"
+
 	"github.com/jedruniu/plotted/pkg/storage"
 	"golang.org/x/oauth2"
-	"net/http"
 )
 
 type AuthCallbackServer struct {
@@ -38,5 +39,3 @@ func (a *AuthCallbackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	http.Redirect(w, r, fmt.Sprintf("%s/map?after=30/05/2019&before=30/09/2019&state=%s", a.SelfURL, callbackState), 302)
 }
-
-

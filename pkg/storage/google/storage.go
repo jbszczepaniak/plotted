@@ -20,7 +20,6 @@ func NewGoogleStorage(ctx context.Context, gaeCredentials, projectID, collection
 
 	client, err := firestore.NewClient(ctx, projectID, clientOpts...)
 
-	// client, err := firestore.NewClient(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
