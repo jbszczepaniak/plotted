@@ -26,7 +26,7 @@ var (
 	projectID       string
 	selfURL         string
 	gaeUsed         bool
-	gaeCredentials  string
+	gaeCredentials  []byte
 	fileStoragePath string
 	cache           storage.Storage
 	stateStore      storage.Storage
@@ -45,7 +45,7 @@ func main() {
 	if environment == "" {
 		environment = "dev"
 	}
-	gaeCredentials = os.Getenv("GOOGLE_CREDENTIALS")
+	gaeCredentials = []byte(os.Getenv("GOOGLE_CREDENTIALS"))
 
 	// Application specific environment variables
 	stravaClientID = os.Getenv("STRAVA_CLIENT_ID")
@@ -72,12 +72,24 @@ func main() {
 		projectID = appengine.AppID(ctx)
 
 		selfURL = fmt.Sprintf("https://%s.appspot.com", projectID)
-		cache, err = googleStorage.NewGoogleStorage(ctx, gaeCredentials, projectID, "store")
-		stateStore, err = googleStorage.NewGoogleStorage(ctx, gaeCredentials, projectID, "state_to_token")
+		cache, err = googleStorage.NewGoogleStorage(ctx, projectID, "store", gaeCredentials)
+		if err != nil {
+			panic(err)
+		}
+		stateStore, err = googleStorage.NewGoogleStorage(ctx, projectID, "state_to_token", gaeCredentials)
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		selfURL = fmt.Sprintf("http://localhost:%d", port)
 		cache, err = fileStorage.NewFileStorage(fileStoragePath)
+		if err != nil {
+			panic(err)
+		}
 		stateStore, err = fileStorage.NewFileStorage(fileStoragePath)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	conf := &oauth2.Config{
