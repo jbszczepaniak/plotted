@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/jedruniu/plotted/pkg/storage"
 	"golang.org/x/oauth2"
@@ -38,6 +39,7 @@ func (a *AuthCallbackServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("could not set state information in the store"), http.StatusBadRequest)
 		return
 	}
-
-	http.Redirect(w, r, fmt.Sprintf("%s/map?after=30/05/2019&before=30/09/2019&state=%s", a.SelfURL, callbackState), 302)
+	after := time.Now().AddDate(0, -3, 0).Format(layout)
+	before := time.Now().Format(layout)
+	http.Redirect(w, r, fmt.Sprintf("%s/map?after=%s&before=%s&state=%s", a.SelfURL, after, before, callbackState), 302)
 }

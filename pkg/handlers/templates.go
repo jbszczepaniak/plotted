@@ -212,16 +212,17 @@ var MapHTML = `
         return parseInt(Math.random() * (max-min+1), 10) + min;
       }
       function getRandomColor() {
-        var h = rand(200, 220);
+        var h = rand(10, 40);
         var s = rand(70, 100);
         var l = rand(20, 50);
         return 'hsl(' + h + ',' + s + '%,' + l + '%)';
       }
 
         var mymap = L.map('mapid').setView([52.380000, 16.920000] , 12);
-        L.tileLayer('https://api.tiles.mapbox.com/v4/{id}/{z}/{x}/{y}.png?access_token={{.MapboxToken}}', {
+        L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={{.MapboxToken}}', {
+            attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
             maxZoom: 18,
-            id: 'mapbox.streets',
+            id: 'mapbox/streets-v11',
         }).addTo(mymap);
         var encodedRoutes = [
           {{range .EncodedRoutes}}
